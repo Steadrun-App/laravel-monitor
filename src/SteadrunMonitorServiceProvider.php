@@ -42,15 +42,26 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
         });
     }
 
+    /**
+     * Очередь может быть сопоставлена со своим check (steadrun.queue_check_uuids)
+     * — иначе падение алертит на общий steadrun.queue_check_uuid, если задан.
+     */
     private function registerFailedJobListener(): void
     {
-        $uuid = config('steadrun.queue_check_uuid');
+        $defaultUuid = config('steadrun.queue_check_uuid');
+        $queueUuids = config('steadrun.queue_check_uuids', []);
 
-        if (! $uuid) {
+        if (! $defaultUuid && $queueUuids === []) {
             return;
         }
 
-        Queue::failing(function (JobFailed $event) use ($uuid): void {
+        Queue::failing(function (JobFailed $event) use ($defaultUuid, $queueUuids): void {
+            $uuid = $queueUuids[$event->job->getQueue()] ?? $defaultUuid;
+
+            if (! $uuid) {
+                return;
+            }
+
             $this->app->make(FailedJobReporter::class)->report($uuid, $event);
         });
     }

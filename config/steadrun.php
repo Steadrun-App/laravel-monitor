@@ -21,11 +21,29 @@ return [
     |--------------------------------------------------------------------------
     |
     | UUID check'а в Steadrun, на который слать failed-job алерты
-    | (см. Queue::failing() в SteadrunMonitorServiceProvider). Если не задан —
-    | слушатель не регистрируется.
+    | (см. Queue::failing() в SteadrunMonitorServiceProvider) для очередей,
+    | не перечисленных ниже в queue_check_uuids. Если не задан и
+    | queue_check_uuids пуст — слушатель не регистрируется.
     |
     */
 
     'queue_check_uuid' => env('STEADRUN_QUEUE_UUID'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queue check UUIDs по конкретным очередям
+    |--------------------------------------------------------------------------
+    |
+    | Если в одном приложении несколько логически разных очередей и падения
+    | в них должны алертить на разные checks — сопоставьте имя очереди
+    | (Job::getQueue()) с UUID check'а. Очередь, которой здесь нет, попадает
+    | под общий queue_check_uuid выше.
+    |
+    | 'emails' => env('STEADRUN_QUEUE_UUID_EMAILS'),
+    | 'imports' => env('STEADRUN_QUEUE_UUID_IMPORTS'),
+    |
+    */
+
+    'queue_check_uuids' => [],
 
 ];
