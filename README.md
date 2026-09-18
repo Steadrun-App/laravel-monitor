@@ -45,6 +45,18 @@ STEADRUN_QUEUE_UUID=uuid-вашего-check-а
 
 Очередь, которой нет в `queue_check_uuids`, попадает под общий `queue_check_uuid`. Если общего UUID тоже нет — падения в такой очереди не алертятся.
 
+### Heartbeat воркера (жив ли сам процесс)
+
+Алерт о упавшем job'е не поможет, если воркер целиком встал (OOM, потеря соединения с очередью) — тогда просто не будет ни новых job'ов, ни падений. Добавьте в `.env`:
+
+```
+STEADRUN_WORKER_HEARTBEAT_UUID=uuid-check-а-типа-queue
+```
+
+Пакет подписывается на `Queue::looping()` — событие Laravel срабатывает на каждой итерации цикла воркера, до проверки наличия job, и отправляет пинг на check не чаще раза в `STEADRUN_WORKER_HEARTBEAT_INTERVAL` секунд (по умолчанию 60). Так отслеживается именно «жив ли процесс», а не «есть ли задачи» — воркер с пустой очередью продолжает пинговать.
+
+Троттлинг — на процесс, не общий: если Supervisor поднимает несколько процессов воркера на одну очередь (`numprocs > 1`), каждый пингует независимо на тот же UUID, суммарная частота = `numprocs × (1 / STEADRUN_WORKER_HEARTBEAT_INTERVAL)`. При типичных значениях (единицы процессов, интервал 60с) это далеко от серверного лимита `/ping/*` (120 запросов/мин на один check).
+
 ### Конфигурация
 
 ```bash
@@ -54,6 +66,8 @@ php artisan vendor:publish --tag=steadrun-config
 - `STEADRUN_BASE_URL` — адрес Steadrun, по умолчанию `https://steadrun.ru`. Переопределите, если используете self-hosted инстанс.
 - `STEADRUN_QUEUE_UUID` — UUID check'а для алертов о упавших job'ах (общий, для очередей вне `queue_check_uuids`).
 - `queue_check_uuids` — сопоставление имени очереди с UUID check'а, для случая нескольких очередей с раздельными алертами (задаётся в опубликованном конфиге, отдельных env-переменных для этого массива нет).
+- `STEADRUN_WORKER_HEARTBEAT_UUID` — UUID check'а для heartbeat воркера (см. «Heartbeat воркера» выше).
+- `STEADRUN_WORKER_HEARTBEAT_INTERVAL` — минимальный интервал между пингами воркера, в секундах (по умолчанию 60).
 
 ### Требования
 
@@ -106,6 +120,18 @@ Any failed job on any queue will automatically send an alert to that check — n
 
 A queue not listed in `queue_check_uuids` falls back to `queue_check_uuid`. If that's not set either, failures on that queue aren't reported.
 
+### Worker heartbeat (is the process itself alive)
+
+A failed-job alert doesn't help if the worker itself has died (OOM, lost connection to the queue) — then there are simply no new jobs and no failures either. Add to `.env`:
+
+```
+STEADRUN_WORKER_HEARTBEAT_UUID=your-queue-type-check-uuid
+```
+
+The package hooks into `Queue::looping()` — a Laravel event fired on every iteration of the worker's loop, before it checks for a job — and pings that check at most once every `STEADRUN_WORKER_HEARTBEAT_INTERVAL` seconds (default 60). This tracks whether the process itself is alive, not whether there's work to do — a worker with an empty queue keeps pinging.
+
+Throttling is per process, not shared: if Supervisor runs multiple worker processes on the same queue (`numprocs > 1`), each one pings independently against the same UUID, so the combined rate is `numprocs × (1 / STEADRUN_WORKER_HEARTBEAT_INTERVAL)`. At typical values (a handful of processes, a 60s interval) this stays well under the server's `/ping/*` rate limit (120 requests/min per check).
+
 ### Configuration
 
 ```bash
@@ -115,6 +141,8 @@ php artisan vendor:publish --tag=steadrun-config
 - `STEADRUN_BASE_URL` — Steadrun instance URL, defaults to `https://steadrun.ru`. Override if self-hosting.
 - `STEADRUN_QUEUE_UUID` — check UUID for failed-job alerts (shared, for queues not in `queue_check_uuids`).
 - `queue_check_uuids` — queue name → check UUID mapping for separate per-queue alerts (set in the published config file; no dedicated env vars for this array).
+- `STEADRUN_WORKER_HEARTBEAT_UUID` — check UUID for the worker heartbeat (see "Worker heartbeat" above).
+- `STEADRUN_WORKER_HEARTBEAT_INTERVAL` — minimum interval between worker pings, in seconds (default 60).
 
 ### Requirements
 

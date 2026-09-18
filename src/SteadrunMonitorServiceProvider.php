@@ -12,6 +12,8 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/steadrun.php', 'steadrun');
+
+        $this->app->singleton(WorkerHeartbeat::class);
     }
 
     public function boot(): void
@@ -22,6 +24,7 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
 
         $this->registerScheduleMacro();
         $this->registerFailedJobListener();
+        $this->registerWorkerHeartbeat();
     }
 
     /**
@@ -63,6 +66,26 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
             }
 
             $this->app->make(FailedJobReporter::class)->report($uuid, $event);
+        });
+    }
+
+    /**
+     * Queue::looping() срабатывает на каждой итерации цикла воркера, до
+     * проверки наличия job — единственный способ отличить «воркер жив, но
+     * очередь пуста» от «воркер упал», не завязываясь на факт обработки job'а.
+     */
+    private function registerWorkerHeartbeat(): void
+    {
+        $uuid = config('steadrun.worker_heartbeat_uuid');
+
+        if (! $uuid) {
+            return;
+        }
+
+        $intervalSeconds = (int) config('steadrun.worker_heartbeat_interval_seconds', 60);
+
+        Queue::looping(function () use ($uuid, $intervalSeconds): void {
+            $this->app->make(WorkerHeartbeat::class)->ping($uuid, $intervalSeconds);
         });
     }
 }

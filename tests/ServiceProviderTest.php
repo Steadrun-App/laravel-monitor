@@ -4,6 +4,7 @@ namespace Steadrun\LaravelMonitor\Tests;
 
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Http;
 use Mockery;
 use RuntimeException;
@@ -89,5 +90,47 @@ class ServiceProviderTest extends TestCase
         event($this->fakeFailedJobEvent(queue: 'imports'));
 
         Http::assertNothingSent();
+    }
+
+    public function test_worker_heartbeat_is_registered_when_uuid_is_configured(): void
+    {
+        config(['steadrun.worker_heartbeat_uuid' => 'worker-uuid', 'steadrun.base_url' => 'https://steadrun.example']);
+        $this->app->register(SteadrunMonitorServiceProvider::class, force: true);
+
+        Http::fake();
+
+        event(new Looping('database', 'default'));
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://steadrun.example/ping/worker-uuid');
+    }
+
+    public function test_worker_heartbeat_is_not_registered_without_uuid(): void
+    {
+        config(['steadrun.worker_heartbeat_uuid' => null]);
+        $this->app->register(SteadrunMonitorServiceProvider::class, force: true);
+
+        Http::fake();
+
+        event(new Looping('database', 'default'));
+
+        Http::assertNothingSent();
+    }
+
+    public function test_worker_heartbeat_is_throttled_across_looping_iterations(): void
+    {
+        config([
+            'steadrun.worker_heartbeat_uuid' => 'worker-uuid',
+            'steadrun.worker_heartbeat_interval_seconds' => 60,
+            'steadrun.base_url' => 'https://steadrun.example',
+        ]);
+        $this->app->register(SteadrunMonitorServiceProvider::class, force: true);
+
+        Http::fake();
+
+        event(new Looping('database', 'default'));
+        event(new Looping('database', 'default'));
+        event(new Looping('database', 'default'));
+
+        Http::assertSentCount(1);
     }
 }
