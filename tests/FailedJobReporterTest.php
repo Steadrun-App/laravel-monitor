@@ -46,4 +46,17 @@ class FailedJobReporterTest extends TestCase
 
         $this->expectNotToPerformAssertions();
     }
+
+    public function test_reports_with_short_timeout(): void
+    {
+        $timeouts = $this->fakeHttpRecordingTimeouts();
+
+        $job = Mockery::mock(Job::class);
+        $job->shouldReceive('resolveName')->andReturn('App\\Jobs\\SendNewsletter');
+        $job->shouldReceive('getQueue')->andReturn('default');
+
+        (new FailedJobReporter)->report('abc-123', new JobFailed('database', $job, new RuntimeException('boom')));
+
+        $this->assertSame([5], $timeouts->getArrayCopy());
+    }
 }

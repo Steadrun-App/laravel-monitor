@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    env:
+      # Laravel 10/11 сняты с поддержки, у всех их версий есть security advisories —
+      # без этого Composer не разрешит зависимости, а нам нужно именно их проверить.
+      COMPOSER_NO_SECURITY_BLOCKING: 1
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '8.1', laravel: '10.*', testbench: '8.*' }
+          - { php: '8.2', laravel: '10.*', testbench: '8.*' }
+          - { php: '8.3', laravel: '10.*', testbench: '8.*' }
+          - { php: '8.2', laravel: '11.*', testbench: '9.*' }
+          - { php: '8.3', laravel: '11.*', testbench: '9.*' }
+          - { php: '8.4', laravel: '11.*', testbench: '9.*' }
+          - { php: '8.2', laravel: '12.*', testbench: '10.*' }
+          - { php: '8.3', laravel: '12.*', testbench: '10.*' }
+          - { php: '8.4', laravel: '12.*', testbench: '10.*' }
+          - { php: '8.3', laravel: '13.*', testbench: '11.*' }
+          - { php: '8.4', laravel: '13.*', testbench: '11.*' }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress -W --with "laravel/framework:${{ matrix.laravel }}" --with "orchestra/testbench:${{ matrix.testbench }}"
+
+      - name: Run tests
+        run: vendor/bin/phpunit

@@ -3,6 +3,7 @@
 namespace Steadrun\LaravelMonitor;
 
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
@@ -25,23 +26,17 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
         $this->registerScheduleMacro();
         $this->registerFailedJobListener();
         $this->registerWorkerHeartbeat();
+        $this->registerScheduledChecks();
     }
 
     /**
-     * ->pingSteadrun($uuid) на Schedule\Event — комбинация штатных
-     * pingBefore/pingOnSuccess/pingOnFailure под структуру ping-эндпоинтов
-     * Steadrun, чтобы не собирать три вызова вручную.
+     * ->pingSteadrun($uuid, withOutput: false) на Schedule\Event — см. SchedulerPing.
      */
     private function registerScheduleMacro(): void
     {
-        ScheduledEvent::macro('pingSteadrun', function (string $uuid) {
+        ScheduledEvent::macro('pingSteadrun', function (string $uuid, bool $withOutput = false) {
             /** @var ScheduledEvent $this */
-            $baseUrl = rtrim((string) config('steadrun.base_url'), '/');
-
-            return $this
-                ->pingBefore("{$baseUrl}/ping/{$uuid}/start")
-                ->pingOnSuccess("{$baseUrl}/ping/{$uuid}")
-                ->pingOnFailure("{$baseUrl}/ping/{$uuid}/fail");
+            return SchedulerPing::attach($this, $uuid, $withOutput);
         });
     }
 
@@ -86,6 +81,35 @@ class SteadrunMonitorServiceProvider extends ServiceProvider
 
         Queue::looping(function () use ($uuid, $intervalSeconds): void {
             $this->app->make(WorkerHeartbeat::class)->ping($uuid, $intervalSeconds);
+        });
+    }
+
+    /**
+     * Задачи расписания, которые пакет регистрирует сам: сквозная проверка
+     * очереди (QueueProbeJob) и cron-heartbeat — пустая задача, чей пинг
+     * говорит «schedule:run тикает». Частота зашита, период check'а на
+     * сервере настраивается под неё.
+     */
+    private function registerScheduledChecks(): void
+    {
+        $probeUuid = config('steadrun.queue_probe_uuid');
+        $cronUuid = config('steadrun.cron_check_uuid');
+
+        if (! $probeUuid && ! $cronUuid) {
+            return;
+        }
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) use ($probeUuid, $cronUuid): void {
+            if ($probeUuid) {
+                $schedule->job(new QueueProbeJob($probeUuid))->everyFiveMinutes();
+            }
+
+            if ($cronUuid) {
+                SchedulerPing::attach(
+                    $schedule->call(fn () => null)->name('steadrun-cron-heartbeat')->everyFiveMinutes(),
+                    $cronUuid,
+                );
+            }
         });
     }
 }

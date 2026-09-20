@@ -40,4 +40,13 @@ class WorkerHeartbeatTest extends TestCase
 
         $this->expectNotToPerformAssertions();
     }
+
+    public function test_pings_with_short_timeout(): void
+    {
+        $timeouts = $this->fakeHttpRecordingTimeouts();
+
+        (new WorkerHeartbeat)->ping('abc-123', 60);
+
+        $this->assertSame([5], $timeouts->getArrayCopy());
+    }
 }

@@ -31,7 +31,7 @@ class WorkerHeartbeat
         $baseUrl = rtrim((string) config('steadrun.base_url'), '/');
 
         try {
-            Http::get("{$baseUrl}/ping/{$uuid}");
+            Http::timeout(5)->get("{$baseUrl}/ping/{$uuid}");
         } catch (Throwable $e) {
             Log::warning('Steadrun: не удалось отправить heartbeat воркера', ['exception' => $e]);
         }

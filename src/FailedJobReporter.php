@@ -27,7 +27,7 @@ class FailedJobReporter
         );
 
         try {
-            Http::withBody($body, 'text/plain')->post("{$baseUrl}/ping/{$uuid}/fail");
+            Http::timeout(5)->withBody($body, 'text/plain')->post("{$baseUrl}/ping/{$uuid}/fail");
         } catch (Throwable $e) {
             Log::warning('Steadrun: не удалось отправить failed-job пинг', ['exception' => $e]);
         }
